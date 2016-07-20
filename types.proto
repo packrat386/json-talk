@@ -1,0 +1,10 @@
+syntax = "proto3";
+package example;
+
+message Example {
+  bool mybool = 1;
+  float number = 2;
+  string mystring = 3;
+  repeated string myarray = 4;
+  map<string, string> myhash = 5;
+}

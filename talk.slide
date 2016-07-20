@@ -1,0 +1,160 @@
+Adventures In Serialization
+Pros, Cons, and Alternatives to JSON
+
+Aidan Coyle
+Services Team
+acoyle@enova.com
+
+* What's in an HTTP Request?
+
+It all becomes text at the end of the day, so we need some way to represent our objects
+
+  HTTP/1.1 200 OK
+  Content-Type: application/json; charset=utf-8
+  X-Request-Id: ec61870b-1650-4eb9-a4cb-02c75a080070
+  X-Revision: latest
+  X-Runtime: 1.2594ms
+  X-Served-By: FG-388.local
+  Date: Wed, 20 Jul 2016 03:35:50 GMT
+  Content-Length: 145
+
+  {"schedules":[{"payments":[{"date":"2012-02-03" ...
+
+But why do we choose to represent objects that way?
+
+* JSON
+
+- Comes from JavaScript
+- Supported by just about everything under the sun
+- No schema
+- Human readable
+
+* JSON
+
+  {
+    "boolean" => true,
+    "number" => 123.45678,
+    "string" => "lorem ipsum",
+    "array" => [ "a", "b", "c" ],
+    "hash" => {
+      "key" => "value"
+    }
+  }
+
+Translates to
+
+  {"boolean":true,"number":123.45678,"string":"lorem ipsum",
+  "array":["a","b","c"],"hash":{"key":"value"}}
+  103 bytes
+
+* MessagePack
+
+- Designed as a drop in replacement for JSON
+- "Official" libraries for many languages
+- No schema
+- Compact binary format
+
+* MessagePack
+
+  {
+    "boolean" => true,
+    "number" => 123.45678,
+    "string" => "lorem ipsum",
+    "array" => [ "a", "b", "c" ],
+    "hash" => {
+      "key" => "value"
+    }
+  }
+
+Translates to
+
+  \x85\xA7boolean\xC3\xA6number\xCB@^\xDD;\xE2.]\xE1\xA6string\xABlorem ipsum
+  \xA5array\x93\xA1a\xA1b\xA1c\xA4hash\x81\xA3key\xA5value
+  74 bytes
+
+* Protocol Buffers
+
+- Developed by Google for efficient message passing
+- Google libraries for C++, Java, C#, Python, and Go (something missing?)
+- Shared schema
+- Compact binary format
+
+* Protocol Buffers
+  syntax = "proto3";
+  package example;
+
+  message Example {
+    bool mybool = 1;
+    float number = 2;
+    string mystring = 3;
+    repeated string myarray = 4;
+    map<string, string> myhash = 5;
+  }
+
+Translates to
+
+  \b\u0001\u0015\xD5\xE9\xF6B\u001A\vlorem ipsum
+  \"\u0001a\"\u0001b\"\u0001c*\f\n\u0003key\u0012\u0005value\n
+  44 bytes
+
+* Our Experiment
+
+We decided to try out MessagePack
+
+- It's easier to maintain across Ruby and Go
+- It required less work to try
+
+We tried it out on Amortizer
+
+- It has a small stable API
+- Speed matters
+
+* The Design
+
+Differentiate between types based on headers
+
+- `Accept` determines what we send the response as
+- `Content-Type` determines what we read input as
+- Extracting parsing and marshalling code where possible
+
+We used these libraries
+
+- Go: [[https://github.com/ugorji/go]]
+- Ruby: [[https://github.com/msgpack/msgpack-ruby]]
+
+* The Results
+
+On Amortizer's end
+
+  BenchmarkJSON-8         20000   84826 ns/op   44907 B/op   818 allocs/op
+  BenchmarkMessagePack-8  20000   75992 ns/op   39021 B/op   753 allocs/op
+  BenchmarkLazy-8         10000   115792 ns/op  50539 B/op   1080 allocs/op
+  ok  git.enova.com/8b/amortizer  6.149s
+
+On the Ruby end
+
+  Rehearsal -------------------------------------------
+  json      7.550000   0.250000   7.800000 (  7.794921)
+  msgpack   4.350000   0.480000   4.830000 (  4.843772)
+  --------------------------------- total: 12.630000sec
+  user      system      total        real
+  json      7.830000   0.270000   8.100000 (  8.106516)
+  msgpack   4.850000   0.500000   5.350000 (  5.365835)
+
+Request Size (10 Loans, 3 payments each)
+
+  JSON: 1315  --- MessagePack: 1002
+
+* The Conclusion
+
+We're not replacing JSON any time soon
+
+- Maturity and portability between languages/frameworks is too important
+- Better support for custom types
+- Good is good enough
+
+Cases where we would consider alternatives
+
+- Size matters
+- Internal representations
+- Stable API versioning
